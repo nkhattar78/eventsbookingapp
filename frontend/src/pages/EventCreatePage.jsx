@@ -10,7 +10,8 @@ import {
   Paper,
   ToggleButtonGroup,
   ToggleButton,
-  Avatar
+  Avatar,
+  Autocomplete
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 
@@ -29,6 +30,10 @@ export default function EventCreatePage() {
   const [preview, setPreview] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('eventCategories');
+    return saved ? JSON.parse(saved) : ['Comedy', 'Drama', 'Music'];
+  });
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -91,6 +96,15 @@ export default function EventCreatePage() {
     }
   }
 
+  function handleCategoryChange(event, value) {
+    if (value && !categories.includes(value)) {
+      const updated = [...categories, value];
+      setCategories(updated);
+      localStorage.setItem('eventCategories', JSON.stringify(updated));
+    }
+    setForm(f => ({ ...f, category: value }));
+  }
+
   return (
     <Box p={3} maxWidth={700} mx="auto">
       <Paper sx={{ p: 3 }}>
@@ -99,6 +113,15 @@ export default function EventCreatePage() {
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2}>
             <TextField label="Title" name="title" value={form.title} onChange={handleChange} required />
+            <Autocomplete
+              freeSolo
+              options={categories}
+              value={form.category || ''}
+              onChange={handleCategoryChange}
+              renderInput={params => (
+                <TextField {...params} label="Category" required />
+              )}
+            />
             <TextField label="Description" name="description" value={form.description} onChange={handleChange} multiline rows={3} />
             <TextField label="Date/Time" name="date_time" type="datetime-local" value={form.date_time} onChange={handleChange} InputLabelProps={{ shrink: true }} required />
             <TextField label="Location" name="location" value={form.location} onChange={handleChange} required />

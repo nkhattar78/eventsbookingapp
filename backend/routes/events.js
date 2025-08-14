@@ -60,10 +60,17 @@ router.get("/", async (_req, res) => {
   }
 });
 
-// Create
+// Create (with category)
 router.post("/", async (req, res) => {
-  const { title, description, date_time, location, image_url, total_tickets } =
-    req.body || {};
+  const {
+    title,
+    description,
+    date_time,
+    location,
+    image_url,
+    total_tickets,
+    category,
+  } = req.body || {};
   if (!title || !date_time || !total_tickets) {
     return res
       .status(400)
@@ -72,8 +79,8 @@ router.post("/", async (req, res) => {
   const storedUrl = await uploadImagePublic(image_url);
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, description, date_time, location, image_url, total_tickets, available_tickets)
-       VALUES ($1, $2, $3, $4, $5, $6, $6) RETURNING *`,
+      `INSERT INTO events (title, description, date_time, location, image_url, total_tickets, available_tickets, category)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7) RETURNING *`,
       [
         title,
         description || null,
@@ -81,6 +88,7 @@ router.post("/", async (req, res) => {
         location || null,
         storedUrl,
         total_tickets,
+        category || null,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -90,7 +98,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Update (partial) - PUT expects id param
+// Update (with category) - PUT expects id param
 router.put("/:id", async (req, res) => {
   const id = req.params.id;
   const {
@@ -101,15 +109,14 @@ router.put("/:id", async (req, res) => {
     image_url,
     total_tickets,
     available_tickets,
+    category,
   } = req.body || {};
   try {
-    // Fetch existing event
     const existing = await pool.query("SELECT * FROM events WHERE id=$1", [id]);
     if (existing.rows.length === 0)
       return res.status(404).json({ error: "Event not found" });
     let newImageUrl = existing.rows[0].image_url;
     if (image_url !== undefined) {
-      // If client passes null or empty string, clear image reference
       if (image_url === null || image_url === "") {
         newImageUrl = null;
       } else if (image_url !== existing.rows[0].image_url) {
@@ -118,8 +125,8 @@ router.put("/:id", async (req, res) => {
       }
     }
     const updated = await pool.query(
-      `UPDATE events SET title=$1, description=$2, date_time=$3, location=$4, image_url=$5, total_tickets=$6, available_tickets=$7
-       WHERE id=$8 RETURNING *`,
+      `UPDATE events SET title=$1, description=$2, date_time=$3, location=$4, image_url=$5, total_tickets=$6, available_tickets=$7, category=$8
+       WHERE id=$9 RETURNING *`,
       [
         title !== undefined ? title : existing.rows[0].title,
         description !== undefined ? description : existing.rows[0].description,
@@ -132,6 +139,7 @@ router.put("/:id", async (req, res) => {
         available_tickets !== undefined
           ? available_tickets
           : existing.rows[0].available_tickets,
+        category !== undefined ? category : existing.rows[0].category,
         id,
       ]
     );

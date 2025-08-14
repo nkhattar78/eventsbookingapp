@@ -11,7 +11,8 @@ import {
   Paper,
   ToggleButtonGroup,
   ToggleButton,
-  Avatar
+  Avatar,
+  Autocomplete
 } from '@mui/material';
 
 export default function EventEditPage() {
@@ -24,6 +25,10 @@ export default function EventEditPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('eventCategories');
+    return saved ? JSON.parse(saved) : ['Comedy', 'Drama', 'Music'];
+  });
 
   useEffect(() => {
     (async () => {
@@ -81,6 +86,15 @@ export default function EventEditPage() {
     });
   }
 
+  function handleCategoryChange(event, value) {
+    if (value && !categories.includes(value)) {
+      const updated = [...categories, value];
+      setCategories(updated);
+      localStorage.setItem('eventCategories', JSON.stringify(updated));
+    }
+    setForm(f => ({ ...f, category: value }));
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSubmitting(true);
@@ -112,6 +126,15 @@ export default function EventEditPage() {
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Stack spacing={2}>
             <TextField label="Title" name="title" value={form.title} onChange={handleChange} required />
+            <Autocomplete
+              freeSolo
+              options={categories}
+              value={form.category || ''}
+              onChange={handleCategoryChange}
+              renderInput={params => (
+                <TextField {...params} label="Category" required />
+              )}
+            />
             <TextField label="Description" name="description" value={form.description} onChange={handleChange} multiline rows={3} />
             <TextField label="Date/Time" name="date_time" type="datetime-local" value={form.date_time} onChange={handleChange} InputLabelProps={{ shrink: true }} required />
             <TextField label="Location" name="location" value={form.location} onChange={handleChange} required />

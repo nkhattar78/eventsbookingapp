@@ -6,21 +6,24 @@ import {
   CircularProgress,
   Alert,
   Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Stack
+  Grid,
+  Card,
+  CardContent,
+  CardMedia,
+  CardActions,
+  Stack,
+  Chip
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 
-export default function EventsListPage() {
+export default function EventsListPage({ search = '' }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [categories, setCategories] = useState(() => {
+    const saved = localStorage.getItem('eventCategories');
+    return saved ? JSON.parse(saved) : ['Comedy', 'Drama', 'Music'];
+  });
 
   useEffect(() => {
     let active = true;
@@ -37,46 +40,54 @@ export default function EventsListPage() {
     return () => { active = false; };
   }, []);
 
+  const filteredEvents = events.filter(ev => {
+    const query = search.toLowerCase();
+    return (
+      ev.title?.toLowerCase().includes(query) ||
+      ev.category?.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <Box p={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h4">Events</Typography>
-        <Button variant="contained" component={RouterLink} to="/events/new">Create Event</Button>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>        
       </Stack>
       {loading && <CircularProgress />}
       {error && <Alert severity="error">{error}</Alert>}
       {!loading && !error && (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Date/Time</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>Available</TableCell>
-                <TableCell></TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {events.map(ev => (
-                <TableRow key={ev.id} hover>
-                  <TableCell>{ev.title}</TableCell>
-                  <TableCell>{new Date(ev.date_time).toLocaleString()}</TableCell>
-                  <TableCell>{ev.location}</TableCell>
-                  <TableCell>{ev.available_tickets} / {ev.total_tickets}</TableCell>
-                  <TableCell>
-                    <Button size="small" component={RouterLink} to={`/events/${ev.id}`}>Details</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {events.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">No events yet</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Grid container spacing={3}>
+          {filteredEvents.map(ev => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={ev.id}>
+              <Card
+                sx={{ height: '100%', display: 'flex', flexDirection: 'column', cursor: 'pointer' }}
+                onClick={() => window.location.href = `/events/${ev.id}`}
+              >
+                <CardMedia
+                  component="img"
+                  height="160"
+                  image={ev.image_url || '/placeholder-event.svg'}
+                  alt={ev.title}
+                  onError={e => { e.target.src = '/placeholder-event.svg'; }}
+                />
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={1}>
+                    <Typography variant="h6" noWrap>{ev.title}</Typography>
+                    {ev.category && <Chip label={ev.category} size="small" color="info" />}
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>{ev.description}</Typography>
+                  <Typography variant="body2"><strong>Date:</strong> {new Date(ev.date_time).toLocaleString()}</Typography>
+                  <Typography variant="body2"><strong>Location:</strong> {ev.location}</Typography>
+                  <Typography variant="body2"><strong>Tickets:</strong> {ev.available_tickets} / {ev.total_tickets}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+          {filteredEvents.length === 0 && (
+            <Grid item xs={12}>
+              <Typography align="center">No events yet</Typography>
+            </Grid>
+          )}
+        </Grid>
       )}
     </Box>
   );
