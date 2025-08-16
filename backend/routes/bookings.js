@@ -4,6 +4,7 @@ const pool = require("../db");
 
 // Get all bookings
 router.get("/", async (req, res) => {
+  console.log("Get booking API called");
   try {
     const result = await pool.query(
       "SELECT * FROM bookings ORDER BY booking_time DESC"
@@ -15,12 +16,22 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Create a booking (with availability check)
+// Create a booking (with availability check and created_by)
 router.post("/", async (req, res) => {
-  const { event_id, customer_name, customer_email, quantity } = req.body || {};
-  if (!event_id || !customer_name || !customer_email || !quantity) {
+  console.log("Create booking API called");
+  const { event_id, customer_name, customer_email, quantity, created_by } =
+    req.body || {};
+  console.log("Booking create received:", req.body);
+  if (
+    !event_id ||
+    !customer_name ||
+    !customer_email ||
+    !quantity ||
+    !created_by
+  ) {
     return res.status(400).json({
-      error: "event_id, customer_name, customer_email, quantity required",
+      error:
+        "event_id, customer_name, customer_email, quantity, created_by required",
     });
   }
   if (quantity <= 0) {
@@ -45,9 +56,9 @@ router.post("/", async (req, res) => {
       [quantity, event_id]
     );
     const result = await pool.query(
-      `INSERT INTO bookings (event_id, customer_name, customer_email, quantity)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [event_id, customer_name, customer_email, quantity]
+      `INSERT INTO bookings (event_id, customer_name, customer_email, quantity, created_by)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [event_id, customer_name, customer_email, quantity, created_by]
     );
     await pool.query("COMMIT");
     res.status(201).json(result.rows[0]);

@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const eventsRoutes = require("./routes/events");
 const bookingsRoutes = require("./routes/bookings");
+const authRoutes = require("./routes/auth");
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cors());
 
 // Routes
+app.use("/auth", authRoutes);
 app.use("/events", eventsRoutes);
 app.use("/bookings", bookingsRoutes);
 

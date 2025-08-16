@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require("../db");
 const supabase = require("../supabase");
 const { randomUUID } = require("crypto");
+const { authRequired, adminOnly } = require("../middleware/auth");
 
 async function uploadImagePublic(imageInput) {
   if (!imageInput) return null;
@@ -47,8 +48,9 @@ function extractStoragePath(publicUrl) {
   return publicUrl.substring(idx + "/object/public/".length);
 }
 
-// Get all events
-router.get("/", async (_req, res) => {
+// Get all events (auth required)
+router.get("/", authRequired, async (_req, res) => {
+  console.log("Get event API called");
   try {
     const result = await pool.query(
       "SELECT * FROM events ORDER BY date_time ASC"
@@ -60,8 +62,8 @@ router.get("/", async (_req, res) => {
   }
 });
 
-// Create (with category)
-router.post("/", async (req, res) => {
+// Create (admin only, sets created_by)
+router.post("/", authRequired, adminOnly, async (req, res) => {
   const {
     title,
     description,
@@ -79,8 +81,8 @@ router.post("/", async (req, res) => {
   const storedUrl = await uploadImagePublic(image_url);
   try {
     const result = await pool.query(
-      `INSERT INTO events (title, description, date_time, location, image_url, total_tickets, available_tickets, category)
-       VALUES ($1, $2, $3, $4, $5, $6, $6, $7) RETURNING *`,
+      `INSERT INTO events (title, description, date_time, location, image_url, total_tickets, available_tickets, category, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8) RETURNING *`,
       [
         title,
         description || null,
@@ -89,6 +91,7 @@ router.post("/", async (req, res) => {
         storedUrl,
         total_tickets,
         category || null,
+        req.user.id,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -98,8 +101,8 @@ router.post("/", async (req, res) => {
   }
 });
 
-// Update (with category) - PUT expects id param
-router.put("/:id", async (req, res) => {
+// Update (admin only)
+router.put("/:id", authRequired, adminOnly, async (req, res) => {
   const id = req.params.id;
   const {
     title,
@@ -150,14 +153,13 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Delete
-router.delete("/:id", async (req, res) => {
+// Delete (admin only)
+router.delete("/:id", authRequired, adminOnly, async (req, res) => {
   const id = req.params.id;
   try {
     const existing = await pool.query("SELECT * FROM events WHERE id=$1", [id]);
     if (existing.rows.length === 0)
       return res.status(404).json({ error: "Event not found" });
-    // (Optional) attempt to remove image (only if you later store path separately; current public URLs are not easily mapped back reliably)
     await pool.query("DELETE FROM events WHERE id=$1", [id]);
     res.status(204).send();
   } catch (err) {
