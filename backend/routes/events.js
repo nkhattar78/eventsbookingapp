@@ -57,7 +57,10 @@ router.get("/", authRequired, async (req, res) => {
   try {
     // Try to get from cache first
     const cachedEvents = await cache.get(cacheKey);
+
+    // Code to use or not use cache
     if (cachedEvents) {
+      //if (!cachedEvents) {
       console.log("✅ Events served from Redis cache");
       return res.json(cachedEvents);
     }
