@@ -111,6 +111,15 @@ export default function EventEditPage() {
         total_tickets: Number(form.total_tickets),
       };
       await updateEvent(id, payload);
+
+      // Invalidate events list cache since event was updated
+      if (window.invalidateEventsListCache) {
+        window.invalidateEventsListCache();
+        console.log(
+          "EventEdit: Invalidated events list cache after event update"
+        );
+      }
+
       navigate(`/events/${id}`);
     } catch (e) {
       setError(e.message);

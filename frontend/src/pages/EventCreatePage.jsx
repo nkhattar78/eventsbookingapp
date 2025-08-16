@@ -93,6 +93,15 @@ export default function EventCreatePage() {
         total_tickets: Number(form.total_tickets),
       };
       await createEvent(payload);
+
+      // Invalidate events list cache since a new event was created
+      if (window.invalidateEventsListCache) {
+        window.invalidateEventsListCache();
+        console.log(
+          "EventCreate: Invalidated events list cache after event creation"
+        );
+      }
+
       navigate("/");
     } catch (e) {
       setError(e.message);

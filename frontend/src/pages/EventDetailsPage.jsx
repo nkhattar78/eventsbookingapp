@@ -45,6 +45,70 @@ function EventDetailsPage() {
   const [deleting, setDeleting] = useState(false);
   const { isAuthenticated, user } = useAuth();
 
+  // Cache management functions for event details (only for user role)
+  const isCacheValid = (eventId) => {
+    if (user?.role !== "user") return false; // No caching for admin
+
+    const cacheKey = `eventDetails_${eventId}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (!cached) {
+      console.log("EventDetails: No cache found for event", eventId);
+      return false;
+    }
+
+    try {
+      const { timestamp } = JSON.parse(cached);
+      const isValid = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+      console.log("EventDetails: Cache valid for event", eventId, ":", isValid);
+      return isValid;
+    } catch (e) {
+      console.log("EventDetails: Invalid cache data for event", eventId);
+      return false;
+    }
+  };
+
+  const loadFromCache = (eventId) => {
+    if (user?.role !== "user") return null;
+
+    const cacheKey = `eventDetails_${eventId}`;
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        console.log("EventDetails: Loaded event from cache:", eventId);
+        return data;
+      }
+    } catch (e) {
+      console.log("EventDetails: Error loading cache for event", eventId, e);
+    }
+    return null;
+  };
+
+  const saveToCache = (eventId, eventData) => {
+    if (user?.role !== "user") {
+      console.log("EventDetails: Skipping cache save for admin role");
+      return;
+    }
+
+    const cacheKey = `eventDetails_${eventId}`;
+    try {
+      const cacheData = {
+        data: eventData,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+      console.log("EventDetails: Saved event to cache:", eventId);
+    } catch (e) {
+      console.log("EventDetails: Error saving to cache for event", eventId, e);
+    }
+  };
+
+  const invalidateEventCache = (eventId) => {
+    const cacheKey = `eventDetails_${eventId}`;
+    localStorage.removeItem(cacheKey);
+    console.log("EventDetails: Invalidated cache for event:", eventId);
+  };
+
   // Log image URL whenever event changes
   useEffect(() => {
     if (event) {
@@ -56,11 +120,30 @@ function EventDetailsPage() {
     let active = true;
     (async () => {
       try {
-        const [eventsData, bookingsData] = await Promise.all([
-          getEvents(),
-          getBookings(id),
-        ]);
-        const ev = eventsData.find((e) => String(e.id) === String(id));
+        let ev = null;
+        let eventsData = null;
+
+        // Check cache first for user role only
+        if (user?.role === "user" && isCacheValid(id)) {
+          ev = loadFromCache(id);
+          console.log("EventDetails: Using cached event data for user");
+        }
+
+        // If no cached data or admin role, fetch from API
+        if (!ev) {
+          console.log("EventDetails: Fetching fresh event data from API");
+          eventsData = await getEvents();
+          ev = eventsData.find((e) => String(e.id) === String(id));
+
+          // Cache the data only for user role
+          if (ev && user?.role === "user") {
+            saveToCache(id, ev);
+          }
+        }
+
+        // Always fetch fresh bookings data (no caching for bookings on this page)
+        const bookingsData = await getBookings(id);
+
         if (active) {
           setEvent(ev);
           setBookings(bookingsData);
@@ -80,7 +163,7 @@ function EventDetailsPage() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, user?.role]); // Added user?.role as dependency
 
   const remaining = useMemo(() => {
     if (!event) return 0;
@@ -105,6 +188,18 @@ function EventDetailsPage() {
         created_by: user?.id, // Include user ID for the created_by field
       };
       const newBooking = await createBooking(payload);
+
+      // Invalidate MyBookings cache since a new booking was created
+      if (window.invalidateMyBookingsCache) {
+        window.invalidateMyBookingsCache();
+        console.log(
+          "EventDetails: Invalidated MyBookings cache after booking creation"
+        );
+      }
+
+      // Invalidate event cache since available tickets changed
+      invalidateEventCache(id);
+
       // Refresh bookings + event available tickets (simplistic: decrement locally)
       setBookings((b) => [newBooking, ...b]);
 
@@ -180,6 +275,18 @@ function EventDetailsPage() {
                     setDeleting(true);
                     try {
                       await deleteEvent(id);
+
+                      // Invalidate event cache since event was deleted
+                      invalidateEventCache(id);
+
+                      // Invalidate events list cache since event was deleted
+                      if (window.invalidateEventsListCache) {
+                        window.invalidateEventsListCache();
+                        console.log(
+                          "EventDetails: Invalidated events list cache after event deletion"
+                        );
+                      }
+
                       navigate("/");
                     } catch (e) {
                       setError(e.message);
@@ -366,6 +473,18 @@ function EventDetailsPage() {
                               if (window.confirm("Cancel this booking?")) {
                                 try {
                                   await deleteBooking(booking.id);
+
+                                  // Invalidate MyBookings cache since a booking was deleted
+                                  if (window.invalidateMyBookingsCache) {
+                                    window.invalidateMyBookingsCache();
+                                    console.log(
+                                      "EventDetails: Invalidated MyBookings cache after user booking deletion"
+                                    );
+                                  }
+
+                                  // Invalidate event cache since available tickets changed
+                                  invalidateEventCache(id);
+
                                   // Update both booking lists
                                   setBookings((bookings) =>
                                     bookings.filter((x) => x.id !== booking.id)
@@ -436,6 +555,18 @@ function EventDetailsPage() {
                             if (window.confirm("Cancel this booking?")) {
                               try {
                                 await deleteBooking(b.id);
+
+                                // Invalidate MyBookings cache since a booking was deleted
+                                if (window.invalidateMyBookingsCache) {
+                                  window.invalidateMyBookingsCache();
+                                  console.log(
+                                    "EventDetails: Invalidated MyBookings cache after booking deletion"
+                                  );
+                                }
+
+                                // Invalidate event cache since available tickets changed
+                                invalidateEventCache(id);
+
                                 setBookings((bookings) =>
                                   bookings.filter((x) => x.id !== b.id)
                                 );

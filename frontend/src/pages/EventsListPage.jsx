@@ -27,14 +27,106 @@ export default function EventsListPage({ search = "" }) {
   });
   const { isAuthenticated, user } = useAuth();
 
+  // Cache management functions for events list (only for user role)
+  const isCacheValid = () => {
+    if (user?.role !== "user") return false; // No caching for admin
+
+    const cached = localStorage.getItem("eventsList");
+    if (!cached) {
+      console.log("EventsList: No cache found");
+      return false;
+    }
+
+    try {
+      const { timestamp } = JSON.parse(cached);
+      const isValid = Date.now() - timestamp < 5 * 60 * 1000; // 5 minutes
+      console.log("EventsList: Cache valid:", isValid);
+      return isValid;
+    } catch (e) {
+      console.log("EventsList: Invalid cache data");
+      return false;
+    }
+  };
+
+  const loadFromCache = () => {
+    if (user?.role !== "user") return null;
+
+    try {
+      const cached = localStorage.getItem("eventsList");
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        console.log(
+          "EventsList: Loaded events from cache, count:",
+          data.length
+        );
+        return data;
+      }
+    } catch (e) {
+      console.log("EventsList: Error loading cache", e);
+    }
+    return null;
+  };
+
+  const saveToCache = (eventsData) => {
+    if (user?.role !== "user") {
+      console.log("EventsList: Skipping cache save for admin role");
+      return;
+    }
+
+    try {
+      const cacheData = {
+        data: eventsData,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem("eventsList", JSON.stringify(cacheData));
+      console.log(
+        "EventsList: Saved events to cache, count:",
+        eventsData.length
+      );
+    } catch (e) {
+      console.log("EventsList: Error saving to cache", e);
+    }
+  };
+
+  const invalidateEventsListCache = () => {
+    localStorage.removeItem("eventsList");
+    console.log("EventsList: Invalidated events list cache");
+  };
+
+  // Expose cache invalidation globally for other components
+  useEffect(() => {
+    window.invalidateEventsListCache = invalidateEventsListCache;
+    return () => {
+      delete window.invalidateEventsListCache;
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const data = await getEvents();
-        if (active) setEvents(data);
+        let data = null;
+
+        // Check cache first for user role only
+        if (user?.role === "user" && isCacheValid()) {
+          data = loadFromCache();
+          console.log("EventsList: Using cached events data for user");
+        }
+
+        // If no cached data or admin role, fetch from API
+        if (!data) {
+          console.log("EventsList: Fetching fresh events data from API");
+          data = await getEvents();
+
+          // Cache the data only for user role
+          if (data && user?.role === "user") {
+            saveToCache(data);
+          }
+        }
+
+        if (active) setEvents(data || []);
       } catch (e) {
-        setError(e.message);
+        if (active) setError(e.message);
       } finally {
         if (active) setLoading(false);
       }
@@ -42,7 +134,7 @@ export default function EventsListPage({ search = "" }) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [user?.role]); // Added user?.role as dependency
 
   const filteredEvents = events.filter((ev) => {
     const query = search.toLowerCase();

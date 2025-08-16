@@ -28,11 +28,100 @@ function MyBookingsPage({ search = "" }) {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Cache keys
+  const CACHE_KEYS = {
+    bookings: `myBookings_${user?.id}`,
+    events: `events_${user?.id}`,
+    timestamp: `myBookings_timestamp_${user?.id}`,
+  };
+
+  // Cache expiry time (5 minutes)
+  const CACHE_EXPIRY = 5 * 60 * 1000;
+
+  // Function to check if cache is valid
+  const isCacheValid = () => {
+    const timestamp = localStorage.getItem(CACHE_KEYS.timestamp);
+    if (!timestamp) {
+      console.log("MyBookings: No cache timestamp found");
+      return false;
+    }
+
+    const isValid = Date.now() - parseInt(timestamp) < CACHE_EXPIRY;
+    console.log(
+      `MyBookings: Cache ${isValid ? "valid" : "expired"} (age: ${Math.round(
+        (Date.now() - parseInt(timestamp)) / 1000
+      )}s)`
+    );
+    return isValid;
+  };
+
+  // Function to load data from cache
+  const loadFromCache = () => {
+    try {
+      const cachedBookings = localStorage.getItem(CACHE_KEYS.bookings);
+      const cachedEvents = localStorage.getItem(CACHE_KEYS.events);
+
+      if (cachedBookings && cachedEvents) {
+        const bookingsData = JSON.parse(cachedBookings);
+        const eventsData = JSON.parse(cachedEvents);
+
+        console.log(
+          `MyBookings: Loaded from cache - ${bookingsData.length} bookings, ${eventsData.length} events`
+        );
+
+        setBookings(bookingsData);
+        setEvents(eventsData);
+        return true;
+      }
+    } catch (e) {
+      console.error("MyBookings: Error loading from cache:", e);
+      // Clear corrupted cache
+      invalidateCache();
+    }
+    return false;
+  };
+
+  // Function to save data to cache
+  const saveToCache = (bookingsData, eventsData) => {
+    try {
+      localStorage.setItem(CACHE_KEYS.bookings, JSON.stringify(bookingsData));
+      localStorage.setItem(CACHE_KEYS.events, JSON.stringify(eventsData));
+      localStorage.setItem(CACHE_KEYS.timestamp, Date.now().toString());
+
+      console.log(
+        `MyBookings: Saved to cache - ${bookingsData.length} bookings, ${eventsData.length} events`
+      );
+    } catch (e) {
+      console.error("MyBookings: Error saving to cache:", e);
+    }
+  };
+
+  // Function to invalidate cache
+  const invalidateCache = () => {
+    localStorage.removeItem(CACHE_KEYS.bookings);
+    localStorage.removeItem(CACHE_KEYS.events);
+    localStorage.removeItem(CACHE_KEYS.timestamp);
+    console.log("MyBookings: Cache invalidated");
+  };
+
+  // Export cache invalidation function for use in other components
+  window.invalidateMyBookingsCache = invalidateCache;
+
   useEffect(() => {
     let active = true;
 
     (async () => {
+      console.log("MyBookings: Starting data load process");
+
       try {
+        // Check if we can use cached data
+        if (isCacheValid() && loadFromCache()) {
+          console.log("MyBookings: Using cached data");
+          if (active) setLoading(false);
+          return;
+        }
+
+        console.log("MyBookings: Fetching fresh data from API");
         const [bookingsData, eventsData] = await Promise.all([
           getBookings(),
           getEvents(),
@@ -43,10 +132,19 @@ function MyBookingsPage({ search = "" }) {
           const userBookings = bookingsData.filter(
             (booking) => String(booking.created_by) === String(user?.id)
           );
+
+          console.log(
+            `MyBookings: API returned ${bookingsData.length} total bookings, ${userBookings.length} for current user`
+          );
+
           setBookings(userBookings);
           setEvents(eventsData);
+
+          // Save to cache
+          saveToCache(userBookings, eventsData);
         }
       } catch (e) {
+        console.error("MyBookings: Error fetching data:", e);
         if (active) setError(e.message);
       } finally {
         if (active) setLoading(false);
@@ -56,7 +154,7 @@ function MyBookingsPage({ search = "" }) {
     return () => {
       active = false;
     };
-  }, [user?.email]);
+  }, [user?.id]);
 
   const getEventById = (eventId) => {
     return events.find((event) => String(event.id) === String(eventId));
@@ -65,15 +163,24 @@ function MyBookingsPage({ search = "" }) {
   const handleCancelBooking = async (bookingId, eventId) => {
     if (window.confirm("Are you sure you want to cancel this booking?")) {
       try {
+        console.log(`MyBookings: Cancelling booking ${bookingId}`);
         await deleteBooking(bookingId);
+
+        // Update local state
         setBookings((prevBookings) =>
           prevBookings.filter((booking) => booking.id !== bookingId)
         );
 
+        // Invalidate cache since booking was cancelled
+        invalidateCache();
+
         // Optionally refresh events to update available tickets
         const eventsData = await getEvents();
         setEvents(eventsData);
+
+        console.log(`MyBookings: Successfully cancelled booking ${bookingId}`);
       } catch (e) {
+        console.error("MyBookings: Error cancelling booking:", e);
         setError(e.message);
       }
     }
